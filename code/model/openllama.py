@@ -232,66 +232,7 @@ class OpenLLAMAPEFTModel(nn.Module):
 
         return image_embeds, patch_tokens
 
-    def forward(self, inputs):
-
-        if 'masks' in inputs:
-
-            image_paths = inputs['images']
-            class_name = inputs['class_names']
-            feats_text_tensor = encode_text_with_prompt_ensemble(self.visual_encoder, class_name, self.device)
-            image_embeds, patch_tokens = self.encode_image_from_tensor(image_paths)
-
-            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)  # [B,1024]
-            image_map = image_embeds.unsqueeze(1) @ feats_text_tensor.transpose(-2, -1)  # [B,1,2]
-            image_map = torch.squeeze(image_map, dim=1)
-
-            B = patch_tokens[0].size(0)
-            patch_tokens = [patch_tokens[i].transpose(1, 2).view(B, 1024, 16, 16) for i in range(4)]
-            patch_tokens = self.mmci(patch_tokens)
-            outputs = self.aGNN(*patch_tokens)
-            outputs = list(outputs)
-            patch_tokens = outputs + patch_tokens
-            anomaly_maps = []
-            for layer in range(len(patch_tokens)):
-                patch_tokens[layer] = patch_tokens[layer].view(patch_tokens[layer].size(0), patch_tokens[layer].size(1),
-                                                               -1).permute(0, 2, 1)
-                patch_tokens[layer] = patch_tokens[layer] / patch_tokens[layer].norm(dim=-1, keepdim=True)
-                anomaly_map = (100.0 * patch_tokens[layer] @ feats_text_tensor.transpose(-2, -1))
-                B, L, C = anomaly_map.shape
-                H = int(np.sqrt(L))
-                anomaly_map = F.interpolate(anomaly_map.permute(0, 2, 1).view(B, 2, H, H),
-                                            size=224, mode='bilinear', align_corners=True)
-                anomaly_map = torch.softmax(anomaly_map, dim=1)
-                anomaly_maps.append(anomaly_map)
-
-            gt = inputs['masks']
-            gt = torch.stack(gt, dim=0).to(self.device)
-            gt = gt.squeeze()
-            gt[gt > 0.3], gt[gt <= 0.3] = 1, 0
-            label, _ = torch.max(gt.view(gt.size(0), -1), dim=1, keepdim=True)
-            label = F.one_hot(label.squeeze(1).long(), num_classes=2)
-            criterion = nn.BCELoss()
-            cls_loss = criterion(torch.sigmoid(image_map.float()), label.float())
-
-
-            loss_pixel = 0
-            for num in range(len(anomaly_maps)):
-                f_loss = self.loss_focal(anomaly_maps[num], gt)
-                d_loss = self.loss_dice(anomaly_maps[num][:, 1, :, :], gt) + self.loss_dice(anomaly_maps[num][:, 0, :, :], 1 - gt)
-                loss_pixel = loss_pixel + 1*f_loss + 0.3*d_loss
-
-            for num in range(len(anomaly_maps)):
-                anomaly_maps[num] = anomaly_maps[num][:, 1, :, :]
-            anomaly_map_all = torch.mean(torch.stack(anomaly_maps, dim=0), dim=0).unsqueeze(1)
-            anomaly_map_all_squeezed = torch.squeeze(anomaly_map_all, dim=1)
-            anomaly_map_all_squeezed[anomaly_map_all_squeezed > 0.5], anomaly_map_all_squeezed[
-                anomaly_map_all_squeezed <= 0.5] = 1, 0
-            matches = anomaly_map_all_squeezed == gt
-            total_elements = matches.numel()
-            correct_matches = matches.sum().item()
-            gen_acc = correct_matches / total_elements
-
-            return cls_loss + loss_pixel, gen_acc
+    
 
     def extract_multimodal_feature(self, inputs, web_demo):
         if inputs['image_paths']:
