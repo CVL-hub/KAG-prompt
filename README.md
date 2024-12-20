@@ -17,7 +17,7 @@ You can download the pre-trained ImageBind model using [[this link]](https://dri
 You can download the the pre-trained weights using [[this link]](https://drive.google.com/file/d/1WVPpRKhO-1KBgbo_2JYH67F5fglKxU-I/view?usp=sharing) and [[this link]](https://drive.google.com/file/d/1Reig-0RUnF1yyD7wYRoioJJ04kfRndgw/view?usp=drive_link). After downloading, place them into [[./code/ckpt/train_mvtec]](./code/ckpt/train_mvtec/) and [[./data//ckpt/train_visa]](./data//ckpt/train_visa/) directory respectively.
 
 ### Test
-*Quick start (use the pre-trained weights)
+* Quick start (use the pre-trained weights)
 ```bash
 cd /KAG-prompt/code
 python test_visa.py
